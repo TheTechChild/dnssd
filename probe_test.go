@@ -304,19 +304,22 @@ func TestProbeServiceNameConflictIsKept(t *testing.T) {
 
 // TestProbeHostConflict tests that any response with different address
 // records for our hostname is a conflict (RFC6762 8.1), and that the
-// lexicographic tie-break is only used for simultaneous probes (RFC6762 8.2).
+// lexicographic tie-break is only used for the authority records of
+// simultaneous probes (RFC6762 8.2), not for known answers in a query.
 func TestProbeHostConflict(t *testing.T) {
 	tests := []struct {
 		Name     string
 		Response bool
+		Answer   bool // record in the answer section, else in the authority section
 		IP       net.IP
 		Conflict bool
 	}{
-		{"response with lower address", true, net.IP{192, 168, 0, 100}, true},
-		{"response with higher address", true, net.IP{192, 168, 0, 200}, true},
-		{"response with same address", true, net.IP{192, 168, 0, 122}, false},
-		{"probe with lower address", false, net.IP{192, 168, 0, 100}, false},
-		{"probe with higher address", false, net.IP{192, 168, 0, 200}, true},
+		{"response with lower address", true, true, net.IP{192, 168, 0, 100}, true},
+		{"response with higher address", true, true, net.IP{192, 168, 0, 200}, true},
+		{"response with our own address (filtered)", true, true, net.IP{192, 168, 0, 122}, false},
+		{"probe with lower address", false, false, net.IP{192, 168, 0, 100}, false},
+		{"probe with higher address", false, false, net.IP{192, 168, 0, 200}, true},
+		{"query with known answer higher address", false, true, net.IP{192, 168, 0, 200}, false},
 	}
 
 	for _, test := range tests {
@@ -352,7 +355,7 @@ func TestProbeHostConflict(t *testing.T) {
 
 			msg := new(dns.Msg)
 			msg.Response = test.Response
-			if test.Response {
+			if test.Answer {
 				msg.Answer = []dns.RR{a}
 			} else {
 				msg.Ns = []dns.RR{a}
